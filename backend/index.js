@@ -1,16 +1,5 @@
 // EXPRESS BLOCK
 const express = require('express')
-const app = express()
-
-
-app.use(express.static('./public'))
-
-
-app.listen(3000, () => {
-  console.log('HTTP Server Started')
-})
-
-
 
 // TO CREATE A SIMPLE WEBSOCKET SERVERE
 
@@ -31,8 +20,17 @@ const io = new Server(server, {
 })
 
 io.on('connection', (socket) => {
-  socket.on('talk-to-server', (message) => {
-    console.log('Got a message from a client', message)
-    socket.emit('talk-to-client', `You said ${message}`)
+
+  socket.on('sendMessage', ({ roomId, message }) => {
+    io.emit('roomMessage', { roomId, message })
+  })
+  socket.on('joinRoomExclusively', (roomId) => {
+    if (roomId >= 1 && roomId <= 50) {
+      socket.rooms.forEach(roomIAmPartOf => socket.leave(roomIAmPartOf))
+      socket.join(roomId)
+    } else {
+      socket.emit('error-from-server', 'Invalid roomId');
+      return;
+    }
   })
 })
