@@ -1,5 +1,6 @@
 // EXPRESS BLOCK
 const express = require('express')
+const { nanoid } = require('nanoid')
 
 // TO CREATE A SIMPLE WEBSOCKET SERVERE
 
@@ -19,15 +20,29 @@ const io = new Server(server, {
   }
 })
 
+const roomIdToMessagesMapping = {}
+
 io.on('connection', (socket) => {
 
-  socket.on('sendMessage', ({ roomId, message }) => {
-    io.emit('roomMessage', { roomId, message })
+  socket.on('sendMessage', (message) => {
+    const { roomId } = message;
+    const finalMessage = {
+      ...message,
+      messageId: nanoid()
+    }
+    roomIdToMessagesMapping[roomId] = roomIdToMessagesMapping[roomId] || [];
+    roomIdToMessagesMapping[roomId].push(finalMessage)
+    io.to(roomId).emit('roomMessage', finalMessage)
   })
   socket.on('joinRoomExclusively', (roomId) => {
+
     if (roomId >= 1 && roomId <= 50) {
       socket.rooms.forEach(roomIAmPartOf => socket.leave(roomIAmPartOf))
       socket.join(roomId)
+      const messages = roomIdToMessagesMapping[roomId] || []
+      for (const message of messages) {
+        socket.emit('roomMessage', message)
+      }
     } else {
       socket.emit('error-from-server', 'Invalid roomId');
       return;

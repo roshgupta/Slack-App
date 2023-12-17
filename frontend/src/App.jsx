@@ -1,5 +1,5 @@
 import { produce } from "immer";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 // eslint-disable-next-line no-unused-vars
 import io, { Socket } from "socket.io-client";
 
@@ -13,18 +13,38 @@ function App() {
   const [activeRoomId, setActiveRoomId] = useState(null);
   const [message, setMessage] = useState("");
 
+  const [username, setUsername] = useState("");
+
+  const isPromtAlreadyShown = useRef(false);
+
   useEffect(() => {
+    if (isPromtAlreadyShown.current === false) {
+      isPromtAlreadyShown.current = true;
+      while (true) {
+        const validUsername = window.prompt("What is your username?");
+        if (validUsername?.trim()) {
+          setUsername(validUsername);
+          break;
+        }
+      }
+    }
     const socket = io("ws://localhost:3001", {
       transports: ["websocket"],
     });
     setMySocket(socket);
 
     socket.on("roomMessage", (data) => {
-      const { roomId, message } = data;
       setRoomIdToMessageMapping(
         produce((state) => {
-          state[roomId] = state[roomId] || [];
-          state[roomId].push(message);
+          state[data.roomId] = state[data.roomId] || [];
+
+          if (
+            state[data.roomId].some((obj) => obj.messageId === data.messageId)
+          ) {
+            // do nothing since messsage is already present
+          } else {
+            state[data.roomId].push(data);
+          }
         })
       );
     });
@@ -48,7 +68,7 @@ function App() {
       alert("Not part of any room");
       return;
     }
-    mySocket.emit("sendMessage", { roomId: activeRoomId, message });
+    mySocket.emit("sendMessage", { roomId: activeRoomId, message, username });
     setMessage("");
   };
 
@@ -78,10 +98,12 @@ function App() {
           })}
       </aside>
       <main className="col-span-9 px-8 h-screen overflow-y-auto flex flex-col">
-        {messagesOfRoom.map((message, index) => {
+        <h2>Your username: {username}</h2>
+        {messagesOfRoom.map((data, index) => {
           return (
             <div key={index} className="w-full px-4 py-4">
-              {message}
+              <b>Sent by {data.username}</b>
+              <p>{data.message}</p>
             </div>
           );
         })}
