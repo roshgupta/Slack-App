@@ -1,7 +1,9 @@
-import { produce } from "immer";
+import { produce, enableMapSet } from "immer";
 import { useEffect, useState, useRef } from "react";
 // eslint-disable-next-line no-unused-vars
 import io, { Socket } from "socket.io-client";
+
+enableMapSet();
 
 function App() {
   /**
@@ -16,6 +18,13 @@ function App() {
   const [username, setUsername] = useState("");
 
   const isPromtAlreadyShown = useRef(false);
+
+  const [roomIdToTypingUsernameMapping, setRoomIdToTypingUsernameMapping] =
+    useState({});
+  const [
+    roomIdUsernameToTypingTimerIndicatorTimeoutIdMapping,
+    setRoomIdUsernameToTypingTimerIndicatorTimeoutIdMapping,
+  ] = useState({});
 
   useEffect(() => {
     if (isPromtAlreadyShown.current === false) {
@@ -49,6 +58,32 @@ function App() {
       );
     });
 
+    socket.on("userTyping", (data) => {
+      const { roomId, username } = data;
+
+      setRoomIdToTypingUsernameMapping(
+        produce((state) => {
+          state[roomId] = state[roomId] || new Set();
+          state[roomId].add(username);
+        })
+      );
+
+      const timeoutId = setTimeout(() => {
+        setRoomIdToTypingUsernameMapping(
+          produce((state) => {
+            state[roomId] = state[roomId] || new Set();
+            state[roomId].delete(username);
+          })
+        );
+      }, 5000);
+      setRoomIdUsernameToTypingTimerIndicatorTimeoutIdMapping(
+        produce((state) => {
+          clearTimeout(state[roomId + "-" + username]);
+          state[roomId + "-" + username] = timeoutId;
+        })
+      );
+    });
+
     return () => {
       socket.close();
     };
@@ -60,7 +95,14 @@ function App() {
     mySocket.emit("joinRoomExclusively", roomId);
   };
 
-  const messagesOfRoom = roomIdToMessageMapping[activeRoomId] || [];
+  const sendTypingIndicator = () => {
+    if (mySocket == null) return null;
+    if (typeof activeRoomId !== "number") {
+      alert("Not part of any room");
+      return;
+    }
+    mySocket.emit("sendTypingIndicator", { roomId: activeRoomId, username });
+  };
 
   const sendMessage = () => {
     if (mySocket == null) return null;
@@ -73,6 +115,13 @@ function App() {
   };
 
   if (mySocket == null) return null;
+
+  const messagesOfRoom = roomIdToMessageMapping[activeRoomId] || [];
+  const typingUsersInTheRoom =
+    roomIdToTypingUsernameMapping[activeRoomId] != null
+      ? [...roomIdToTypingUsernameMapping[activeRoomId]]
+      : [];
+
   return (
     <div className="grid grid-cols-12 divide-x divide-gray-300 ">
       <aside className="col-span-3 h-screen overflow-y-auto">
@@ -99,6 +148,9 @@ function App() {
       </aside>
       <main className="col-span-9 px-8 h-screen overflow-y-auto flex flex-col">
         <h2>Your username: {username}</h2>
+        {typingUsersInTheRoom.length > 0 ? (
+          <p>Typing users: {typingUsersInTheRoom.join(", ")}</p>
+        ) : null}
         {messagesOfRoom.map((data, index) => {
           return (
             <div key={index} className="w-full px-4 py-4">
@@ -115,7 +167,10 @@ function App() {
             rows="2"
             className="mb-8 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 flex-grow"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              sendTypingIndicator();
+              setMessage(e.target.value);
+            }}
           ></textarea>
           <button
             type="button"

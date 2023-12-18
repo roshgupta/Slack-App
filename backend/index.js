@@ -34,6 +34,10 @@ io.on('connection', (socket) => {
     roomIdToMessagesMapping[roomId].push(finalMessage)
     io.to(roomId).emit('roomMessage', finalMessage)
   })
+  socket.on('sendTypingIndicator', (message) => {
+    const { roomId } = message;
+    io.to(roomId).emit('userTyping', message);
+  })
   socket.on('joinRoomExclusively', (roomId) => {
 
     if (roomId >= 1 && roomId <= 50) {
